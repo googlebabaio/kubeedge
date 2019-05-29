@@ -694,7 +694,9 @@ func (e *edged) handlePod(op string, content []byte) (err error) {
 	case model.UpdateOperation:
 		e.updatePod(&pod)
 	case model.DeleteOperation:
-		e.deletePod(&pod)
+		if delPod, ok := e.podManager.GetPodByName(pod.Namespace, pod.Name); ok {
+			e.deletePod(delPod)
+		}
 	}
 	return nil
 }
@@ -720,12 +722,11 @@ func (e *edged) handlePodListFromMetaManager(content []byte) (err error) {
 
 func (e *edged) handlePodListFromEdgeController(content []byte) (err error) {
 	var lists []v1.Pod
+	if err := json.Unmarshal(content, &lists); err != nil {
+		return err
+	}
 
 	for _, list := range lists {
-		err = json.Unmarshal(content, &list)
-		if err != nil {
-			return err
-		}
 		e.addPod(&list)
 	}
 

@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/kubeedge/beehive/pkg/common/log"
 	"github.com/kubeedge/beehive/pkg/core/model"
@@ -32,7 +33,7 @@ import (
 
 // NewPodManager creates pod manger
 func NewPodManager() (*PodManager, error) {
-	event := make(chan *model.Message)
+	event := make(chan *model.Message, 1024)
 	pm := &PodManager{event: event}
 	return pm, nil
 }
@@ -65,6 +66,10 @@ func (pm *PodManager) UpdatePodStatus(k string, s string) {
 	v, ok := pm.pods.Load(k)
 	if ok {
 		pod := v.(types.FakePod)
+		// Status becomes running in the first time
+		if pod.Status != s && s == constants.PodRunning {
+			pod.RunningTime = time.Now().UnixNano()
+		}
 		pod.Status = s
 		pm.pods.Store(k, pod)
 	}
@@ -138,9 +143,14 @@ func (pm *PodManager) PodHandlerFunc(w http.ResponseWriter, req *http.Request) {
 		msg.BuildRouter(constants.ControllerStub, constants.GroupResource, resource, model.InsertOperation)
 
 		// Add pod in cache
+		p.CreateTime = time.Now().UnixNano()
 		pm.AddPod(ns+"/"+p.Name, p)
-		pm.event <- msg
-		log.LOGGER.Debugf("Finish add pod request")
+
+		// Send msg
+		select {
+		case pm.event <- msg:
+			log.LOGGER.Debugf("Finish add pod request")
+		}
 	case http.MethodDelete:
 		// Delete Pod
 		log.LOGGER.Debugf("Receive delete pod request")
@@ -166,8 +176,13 @@ func (pm *PodManager) PodHandlerFunc(w http.ResponseWriter, req *http.Request) {
 
 		// Delete pod in cache
 		pm.DeletePod(ns + "/" + name)
-		pm.event <- msg
-		log.LOGGER.Debugf("Finish delete pod request")
+
+		// Send msg
+		select {
+		case pm.event <- msg:
+			log.LOGGER.Debugf("Finish delete pod request")
+		}
+
 	default:
 		log.LOGGER.Errorf("Http type: %s unsupported", req.Method)
 	}
