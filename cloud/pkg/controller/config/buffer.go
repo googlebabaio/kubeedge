@@ -18,6 +18,12 @@ var QueryConfigMapBuffer int
 // QuerySecretBuffer is the size of channel which save query secret message from edge
 var QuerySecretBuffer int
 
+// QueryServiceBuffer is the size of channel which save query service message from edge
+var QueryServiceBuffer int
+
+// QueryEndpointsBuffer is the size of channel which save query endpoints message from edge
+var QueryEndpointsBuffer int
+
 // PodEventBuffer is the size of channel which save pod event from k8s
 var PodEventBuffer int
 
@@ -26,6 +32,12 @@ var ConfigMapEventBuffer int
 
 // SecretEventBuffer is the size of channel which save secret event from k8s
 var SecretEventBuffer int
+
+// ServiceEventBuffer is the size of channel which save service event from k8s
+var ServiceEventBuffer int
+
+// EndpointsEventBuffer is the size of channel which save endpoints event from k8s
+var EndpointsEventBuffer int
 
 func init() {
 	if psb, err := config.CONFIG.GetValue("controller.buffer.update-pod-status").ToInt(); err != nil {
@@ -54,7 +66,22 @@ func init() {
 	} else {
 		QuerySecretBuffer = qsb
 	}
-	log.LOGGER.Infof("Update controller.buffer.query-secret: %d", QuerySecretBuffer)
+
+	if qsb, err := config.CONFIG.GetValue("controller.buffer.query-service").ToInt(); err != nil {
+		QueryServiceBuffer = constants.DefaultQueryServiceBuffer
+	} else {
+		QueryServiceBuffer = qsb
+	}
+
+	log.LOGGER.Infof("Update controller.buffer.query-service: %d", QueryServiceBuffer)
+
+	if qeb, err := config.CONFIG.GetValue("controller.buffer.query-endpoints").ToInt(); err != nil {
+		QueryEndpointsBuffer = constants.DefaultQueryEndpointsBuffer
+	} else {
+		QueryEndpointsBuffer = qeb
+	}
+
+	log.LOGGER.Infof("Update controller.buffer.query-endpoints: %d", QueryEndpointsBuffer)
 
 	if peb, err := config.CONFIG.GetValue("controller.buffer.pod-event").ToInt(); err != nil {
 		PodEventBuffer = constants.DefaultPodEventBuffer
@@ -77,4 +104,17 @@ func init() {
 	}
 	log.LOGGER.Infof("Update controller.buffer.secret-event: %d", SecretEventBuffer)
 
+	if seb, err := config.CONFIG.GetValue("controller.buffer.service-event").ToInt(); err != nil {
+		ServiceEventBuffer = constants.DefaultServiceEventBuffer
+	} else {
+		ServiceEventBuffer = seb
+	}
+	log.LOGGER.Infof("Update controller.buffer.service-event: %d", ServiceEventBuffer)
+
+	if epb, err := config.CONFIG.GetValue("controller.buffer.endpoints-event").ToInt(); err != nil {
+		EndpointsEventBuffer = constants.DefaultEndpointsEventBuffer
+	} else {
+		EndpointsEventBuffer = epb
+	}
+	log.LOGGER.Infof("Update controller.buffer.endpoint-event: %d", EndpointsEventBuffer)
 }

@@ -47,6 +47,12 @@ const (
 	SrcManager    = "edgemgr"
 )
 
+// constants for identifier information for edge hub
+const (
+	ProjectID = "project_id"
+	NodeID    = "node_id"
+)
+
 // HubInfo saves identifier information for edge hub
 type HubInfo struct {
 	ProjectID string
@@ -99,7 +105,7 @@ func MessageToEvent(msg *model.Message) Event {
 func NewResource(resType, resID string, info *HubInfo) string {
 	var prefix string
 	if info != nil {
-		prefix = fmt.Sprintf("%s/%s/", "node", info.NodeID)
+		prefix = fmt.Sprintf("%s/%s/", model.ResourceTypeNode, info.NodeID)
 	}
 	if resID == "" {
 		return fmt.Sprintf("%s%s", prefix, resType)

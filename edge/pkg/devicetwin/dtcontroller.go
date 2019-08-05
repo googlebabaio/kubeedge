@@ -85,9 +85,8 @@ func (dtc *DTController) Start() error {
 	}()
 	for {
 		select {
-
 		case <-time.After((time.Duration)(60) * time.Second):
-			//range tocheck whether has bug
+			//range to check whether has bug
 			for dtmName := range dtc.DTModules {
 				health, ok := dtc.DTContexts.ModulesHealth.Load(dtmName)
 				if ok {
@@ -101,7 +100,6 @@ func (dtc *DTController) Start() error {
 			for _, v := range dtc.HeartBeatToModule {
 				v <- "ping"
 			}
-		case <-time.After((time.Duration)(60) * time.Second):
 		case <-dtc.Stop:
 			for _, v := range dtc.HeartBeatToModule {
 				v <- "stop"
@@ -123,7 +121,9 @@ func (dtc *DTController) distributeMsg(m interface{}) error {
 	if message.Msg.GetParentID() != "" {
 		log.LOGGER.Infof("Send msg to the %s module in twin", dtcommon.CommModule)
 		confirmMsg := dttype.DTMessage{Msg: model.NewMessage(message.Msg.GetParentID()), Action: dtcommon.Confirm}
-		dtc.DTContexts.CommTo(dtcommon.CommModule, &confirmMsg)
+		if err := dtc.DTContexts.CommTo(dtcommon.CommModule, &confirmMsg); err != nil {
+			return err
+		}
 	}
 	if !classifyMsg(&message) {
 		return errors.New("Not found action")
@@ -135,7 +135,9 @@ func (dtc *DTController) distributeMsg(m interface{}) error {
 	if moduleName, exist := ActionModuleMap[message.Action]; exist {
 		//how to deal write channel error
 		log.LOGGER.Infof("Send msg to the %s module in twin", moduleName)
-		dtc.DTContexts.CommTo(moduleName, &message)
+		if err := dtc.DTContexts.CommTo(moduleName, &message); err != nil {
+			return err
+		}
 	} else {
 		log.LOGGER.Info("Not found deal module for msg")
 		return errors.New("Not found deal module for msg")
@@ -298,42 +300,32 @@ func classifyMsg(message *dttype.DTMessage) bool {
 		log.LOGGER.Infof("Classify the msg to action %s", action)
 		return true
 	} else if (strings.Compare(msgSource, "edgemgr") == 0) || (strings.Compare(msgSource, "devicecontroller") == 0) {
-		if strings.Contains(message.Msg.Router.Resource, "membership/detail") {
-			message.Action = dtcommon.MemDetailResult
+		switch message.Msg.Content.(type) {
+		case []byte:
+			log.LOGGER.Info("Message content type is []byte, no need to marshal again")
+		default:
 			content, err := json.Marshal(message.Msg.Content)
 			if err != nil {
 				return false
 			}
 			message.Msg.Content = content
+		}
+		if strings.Contains(message.Msg.Router.Resource, "membership/detail") {
+			message.Action = dtcommon.MemDetailResult
 			return true
 		} else if strings.Contains(message.Msg.Router.Resource, "membership") {
 			message.Action = dtcommon.MemUpdated
-			content, err := json.Marshal(message.Msg.Content)
-			if err != nil {
-				return false
-			}
-			message.Msg.Content = content
 			return true
 		} else if strings.Contains(message.Msg.Router.Resource, "twin/cloud_updated") {
 			message.Action = dtcommon.TwinCloudSync
-			content, err := json.Marshal(message.Msg.Content)
-			if err != nil {
-				return false
-			}
 			resources := strings.Split(message.Msg.Router.Resource, "/")
 			message.Identity = resources[1]
-			message.Msg.Content = content
 			return true
 		} else if strings.Contains(message.Msg.Router.Operation, "updated") {
 			resources := strings.Split(message.Msg.Router.Resource, "/")
 			if len(resources) == 2 && strings.Compare(resources[0], "device") == 0 {
 				message.Action = dtcommon.DeviceUpdated
 				message.Identity = resources[1]
-				content, err := json.Marshal(message.Msg.Content)
-				if err != nil {
-					return false
-				}
-				message.Msg.Content = content
 			}
 			return true
 		}

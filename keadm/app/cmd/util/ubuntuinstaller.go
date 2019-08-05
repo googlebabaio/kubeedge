@@ -25,6 +25,14 @@ import (
 	types "github.com/kubeedge/kubeedge/keadm/app/cmd/common"
 )
 
+const downloadRetryTimes int = 3
+
+// Ubuntu releases
+const (
+	UbuntuXenial = "xenial"
+	UbuntuBionic = "bionic"
+)
+
 //UbuntuOS struct objects shall have information of the tools version to be installed
 //on Hosts having Ubuntu OS.
 //It implements OSTypeInstaller interface
@@ -33,6 +41,8 @@ type UbuntuOS struct {
 	KubernetesVersion string
 	KubeEdgeVersion   string
 	IsEdgeNode        bool //True - Edgenode False - Cloudnode
+	K8SImageRepository string
+	K8SPodNetworkCidr  string
 }
 
 //SetDockerVersion sets the Docker version for the objects instance
@@ -45,6 +55,13 @@ func (u *UbuntuOS) SetDockerVersion(version string) {
 func (u *UbuntuOS) SetK8SVersionAndIsNodeFlag(version string, flag bool) {
 	u.KubernetesVersion = version
 	u.IsEdgeNode = flag
+}
+
+//SetK8SImageRepoAndPodNetworkCidr sets the K8S image Repository and pod network
+// cidr.
+func (u *UbuntuOS) SetK8SImageRepoAndPodNetworkCidr(repo, cidr string) {
+	u.K8SImageRepository = repo
+	u.K8SPodNetworkCidr = cidr
 }
 
 //SetKubeEdgeVersion sets the KubeEdge version for the objects instance
@@ -86,13 +103,11 @@ func (u *UbuntuOS) addDockerRepositoryAndUpdate() error {
 	fmt.Println("Ubuntu distribution version is", distVersion)
 
 	//'apt-get update'
-	cmd = &Command{Cmd: exec.Command("sh", "-c", "apt-get update")}
-	err := cmd.ExecuteCmdShowOutput()
-	errout := cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err := runCommandWithShell("apt-get update")
+	if err != nil {
+		return err
 	}
-	fmt.Println(cmd.GetStdOutput())
+	fmt.Println(stdout)
 
 	//"curl -fsSL \"$DOWNLOAD_URL/linux/$lsb_dist/gpg\" | apt-key add"
 	//Get the GPG key
@@ -116,13 +131,11 @@ func (u *UbuntuOS) addDockerRepositoryAndUpdate() error {
 	}
 
 	//Do an apt-get update
-	cmd = &Command{Cmd: exec.Command("sh", "-c", "apt-get update")}
-	err = cmd.ExecuteCmdShowOutput()
-	errout = cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err = runCommandWithShell("apt-get update")
+	if err != nil {
+		return err
 	}
-	fmt.Println(cmd.GetStdOutput())
+	fmt.Println(stdout)
 
 	return nil
 }
@@ -132,16 +145,17 @@ func (u *UbuntuOS) IsDockerInstalled(defVersion string) (types.InstallState, err
 	cmd := &Command{Cmd: exec.Command("sh", "-c", "docker -v | cut -d ' ' -f3 | cut -d ',' -f1")}
 	cmd.ExecuteCommand()
 	str := cmd.GetStdOutput()
-	if str == "" {
-		return types.NewInstallRequired, nil
-	}
 
-	if strings.Contains(cmd.GetStdOutput(), u.DockerVersion) {
+	if strings.Contains(str, u.DockerVersion) {
 		return types.AlreadySameVersionExist, nil
 	}
 
 	if err := u.addDockerRepositoryAndUpdate(); err != nil {
 		return types.VersionNAInRepo, err
+	}
+
+	if str == "" {
+		return types.NewInstallRequired, nil
 	}
 
 	isReqVerAvail, err := u.IsToolVerInRepo("docker-ce", u.DockerVersion)
@@ -172,22 +186,20 @@ func (u *UbuntuOS) IsDockerInstalled(defVersion string) (types.InstallState, err
 func (u *UbuntuOS) InstallDocker() error {
 	fmt.Println("Installing ", u.DockerVersion, "version of docker")
 
-	//Do an apt-get update
+	//Do an apt-get install
 	instPreReq := fmt.Sprintf("apt-get install -y %s", DockerPreqReqList)
-	cmd := &Command{Cmd: exec.Command("sh", "-c", instPreReq)}
-	err := cmd.ExecuteCmdShowOutput()
-	errout := cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err := runCommandWithShell(instPreReq)
+	if err != nil {
+		return err
 	}
-	fmt.Println(cmd.GetStdOutput())
+	fmt.Println(stdout)
 
 	//Get the exact version string from OS repo, so that it can search and install.
 	chkDockerVer := fmt.Sprintf("apt-cache madison 'docker-ce' | grep %s | head -1 | awk '{$1=$1};1' | cut -d' ' -f 3", u.DockerVersion)
-	cmd = &Command{Cmd: exec.Command("sh", "-c", chkDockerVer)}
+	cmd := &Command{Cmd: exec.Command("sh", "-c", chkDockerVer)}
 	cmd.ExecuteCommand()
-	stdout := cmd.GetStdOutput()
-	errout = cmd.GetStdErr()
+	stdout = cmd.GetStdOutput()
+	errout := cmd.GetStdErr()
 	if errout != "" {
 		return fmt.Errorf("%s", errout)
 	}
@@ -196,13 +208,11 @@ func (u *UbuntuOS) InstallDocker() error {
 
 	//Install docker-ce
 	dockerInst := fmt.Sprintf("apt-get install -y --allow-change-held-packages --allow-downgrades docker-ce=%s", stdout)
-	cmd = &Command{Cmd: exec.Command("sh", "-c", dockerInst)}
-	err = cmd.ExecuteCmdShowOutput()
-	errout = cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err = runCommandWithShell(dockerInst)
+	if err != nil {
+		return err
 	}
-	fmt.Println(cmd.GetStdOutput())
+	fmt.Println(stdout)
 
 	fmt.Println("Docker", u.DockerVersion, "version is installed in this Host")
 
@@ -226,12 +236,9 @@ func (u *UbuntuOS) InstallMQTT() error {
 
 	//Install mqttInst
 	mqttInst := fmt.Sprintf("apt-get install -y --allow-change-held-packages --allow-downgrades mosquitto")
-	cmd = &Command{Cmd: exec.Command("sh", "-c", mqttInst)}
-	err := cmd.ExecuteCmdShowOutput()
-	stdout = cmd.GetStdOutput()
-	errout = cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err := runCommandWithShell(mqttInst)
+	if err != nil {
+		return err
 	}
 	fmt.Println(stdout)
 
@@ -247,16 +254,17 @@ func (u *UbuntuOS) IsK8SComponentInstalled(component, defVersion string) (types.
 	cmd := &Command{Cmd: exec.Command("sh", "-c", find)}
 	cmd.ExecuteCommand()
 	str := cmd.GetStdOutput()
-	if str == "" {
-		return types.NewInstallRequired, nil
-	}
 
-	if strings.Contains(cmd.GetStdOutput(), u.KubernetesVersion) {
+	if strings.Contains(str, u.KubernetesVersion) {
 		return types.AlreadySameVersionExist, nil
 	}
 
 	if err := u.addK8SRepositoryAndUpdate(); err != nil {
 		return types.VersionNAInRepo, err
+	}
+
+	if str == "" {
+		return types.NewInstallRequired, nil
 	}
 
 	isReqVerAvail, err := u.IsToolVerInRepo(component, u.KubernetesVersion)
@@ -292,14 +300,19 @@ func (u *UbuntuOS) addK8SRepositoryAndUpdate() error {
 		return fmt.Errorf("ubuntu dist version not available")
 	}
 	fmt.Println("Ubuntu distribution version is", distVersion)
+	distVersionForSuite := distVersion
+	if distVersion == UbuntuBionic {
+		// No bionic-specific version is available on apt.kubernetes.io.
+		// Use xenial version instead.
+		distVersionForSuite = UbuntuXenial
+	}
+	suite := fmt.Sprintf("kubernetes-%s", distVersionForSuite)
+	fmt.Println("Deb suite to use:", suite)
 
 	//Do an apt-get update
-	cmd = &Command{Cmd: exec.Command("sh", "-c", "apt-get update")}
-	err := cmd.ExecuteCmdShowOutput()
-	stdout := cmd.GetStdOutput()
-	errout := cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err := runCommandWithShell("apt-get update")
+	if err != nil {
+		return err
 	}
 	fmt.Println(stdout)
 
@@ -316,7 +329,7 @@ func (u *UbuntuOS) addK8SRepositoryAndUpdate() error {
 	fmt.Println(curlOutput)
 
 	//Add K8S repo to local apt-get source.list
-	aptRepo := fmt.Sprintf("deb %s kubernetes-%s main", KubernetesDownloadURL, distVersion)
+	aptRepo := fmt.Sprintf("deb %s %s main", KubernetesDownloadURL, suite)
 	updtRepo := fmt.Sprintf("echo \"%s\" > /etc/apt/sources.list.d/kubernetes.list", aptRepo)
 	cmd = &Command{Cmd: exec.Command("sh", "-c", updtRepo)}
 	cmd.ExecuteCommand()
@@ -326,12 +339,9 @@ func (u *UbuntuOS) addK8SRepositoryAndUpdate() error {
 	}
 
 	//Do an apt-get update
-	cmd = &Command{Cmd: exec.Command("sh", "-c", "apt-get update")}
-	err = cmd.ExecuteCmdShowOutput()
-	stdout = cmd.GetStdOutput()
-	errout = cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err = runCommandWithShell("apt-get update")
+	if err != nil {
+		return err
 	}
 	fmt.Println(stdout)
 	return nil
@@ -356,13 +366,11 @@ func (u *UbuntuOS) InstallK8S() error {
 
 	//Install respective K8S components based on where it is being installed
 	k8sInst := fmt.Sprintf("apt-get install -y --allow-change-held-packages --allow-downgrades kubeadm=%s kubelet=%s kubectl=%s", stdout, stdout, stdout)
-	cmd = &Command{Cmd: exec.Command("sh", "-c", k8sInst)}
-	err := cmd.ExecuteCmdShowOutput()
-	errout = cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err := runCommandWithShell(k8sInst)
+	if err != nil {
+		return err
 	}
-	fmt.Println(cmd.GetStdOutput())
+	fmt.Println(stdout)
 
 	fmt.Println(k8sComponent, "version", u.KubernetesVersion, "is installed in this Host")
 
@@ -381,22 +389,18 @@ func (u *UbuntuOS) StartK8Scluster() error {
 		install = false
 	}
 	if install == true {
-		cmd := &Command{Cmd: exec.Command("sh", "-c", "swapoff -a && kubeadm init")}
-		err := cmd.ExecuteCmdShowOutput()
-		errout := cmd.GetStdErr()
-		if err != nil || errout != "" {
-			return fmt.Errorf("kubeadm init failed:%s", errout)
+		k8sInit := fmt.Sprintf("swapoff -a && kubeadm init --image-repository  \"%s\" --pod-network-cidr=%s", u.K8SImageRepository, u.K8SPodNetworkCidr)
+		stdout, err := runCommandWithShell(k8sInit)
+		if err != nil {
+			return err
 		}
+		fmt.Println(stdout)
 
-		fmt.Println(cmd.GetStdOutput())
-
-		cmd = &Command{Cmd: exec.Command("sh", "-c", " mkdir -p $HOME/.kube && cp -r /etc/kubernetes/admin.conf $HOME/.kube/config &&  sudo chown $(id -u):$(id -g) $HOME/.kube/config")}
-		err = cmd.ExecuteCmdShowOutput()
-		errout = cmd.GetStdErr()
-		if err != nil || errout != "" {
-			return fmt.Errorf("copying configuration file of kubeadm failed:%s", errout)
+		stdout, err = runCommandWithShell("mkdir -p $HOME/.kube && cp -r /etc/kubernetes/admin.conf $HOME/.kube/config &&  sudo chown $(id -u):$(id -g) $HOME/.kube/config")
+		if err != nil {
+			return err
 		}
-		fmt.Println(cmd.GetStdOutput())
+		fmt.Println(stdout)
 	} else {
 		return fmt.Errorf("kubeadm not installed in this host")
 	}
@@ -433,6 +437,7 @@ func (u *UbuntuOS) InstallKubeEdge() error {
 	//Currently it is missing and once checksum is in place, checksum check required
 	//to be added here.
 	filename := fmt.Sprintf("kubeedge-v%s-linux-%s.tar.gz", u.KubeEdgeVersion, arch)
+	checksumFilename := fmt.Sprintf("checksum_kubeedge-v%s-linux-%s.txt", u.KubeEdgeVersion, arch)
 	filePath := fmt.Sprintf("%s%s", KubeEdgePath, filename)
 	fileStat, err := os.Stat(filePath)
 	if err == nil && fileStat.Name() != "" {
@@ -440,25 +445,54 @@ func (u *UbuntuOS) InstallKubeEdge() error {
 		goto SKIPDOWNLOADAND
 	}
 
-	//Download the tar from repo
-	dwnldURL = fmt.Sprintf("cd %s && wget -k --no-check-certificate --progress=bar:force %s/v%s/%s", KubeEdgePath, KubeEdgeDownloadURL, u.KubeEdgeVersion, filename)
-	cmd = &Command{Cmd: exec.Command("sh", "-c", dwnldURL)}
-	err = cmd.ExecuteCmdShowOutput()
-	errout = cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	for i := 0; i < downloadRetryTimes; i++ {
+		//Download the tar from repo
+		dwnldURL = fmt.Sprintf("cd %s && wget -k --no-check-certificate --progress=bar:force %s/v%s/%s", KubeEdgePath, KubeEdgeDownloadURL, u.KubeEdgeVersion, filename)
+		_, err := runCommandWithShell(dwnldURL)
+		if err != nil {
+			return err
+		}
+		fmt.Println()
+
+		//Verify the tar with checksum
+		fmt.Printf("%s checksum: \n", filename)
+		cmdStr := fmt.Sprintf("cd %s && sha512sum %s | awk '{split($0,a,\"[ ]\"); print a[1]}'", KubeEdgePath, filename)
+		cmd = &Command{Cmd: exec.Command("sh", "-c", cmdStr)}
+		cmd.ExecuteCommand()
+		desiredChecksum := cmd.GetStdOutput()
+		fmt.Printf("%s \n\n", cmd.GetStdOutput())
+
+		fmt.Printf("%s content: \n", checksumFilename)
+		cmdStr = fmt.Sprintf("wget -qO- %s/v%s/%s", KubeEdgeDownloadURL, u.KubeEdgeVersion, checksumFilename)
+		cmd = &Command{Cmd: exec.Command("sh", "-c", cmdStr)}
+		cmd.ExecuteCommand()
+		actualChecksum := cmd.GetStdOutput()
+		fmt.Printf("%s \n\n", cmd.GetStdOutput())
+
+		if desiredChecksum == actualChecksum {
+			break
+		}
+
+		if i < downloadRetryTimes-1 {
+			fmt.Printf("Failed to verify the checksum of %s, try to download it again ... \n\n", filename)
+			//Cleanup the downloaded files
+			cmdStr = fmt.Sprintf("cd %s && rm -f %s", KubeEdgePath, filename)
+			_, err := runCommandWithShell(cmdStr)
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("failed to verify the checksum of %s", filename)
+		}
 	}
-	fmt.Println(cmd.GetStdOutput())
 
 SKIPDOWNLOADAND:
 	untarFileAndMove := fmt.Sprintf("cd %s && tar -C %s -xvzf %s && cp %s/kubeedge/edge/%s /usr/local/bin/.", KubeEdgePath, KubeEdgePath, filename, KubeEdgePath, KubeEdgeBinaryName)
-	cmd = &Command{Cmd: exec.Command("sh", "-c", untarFileAndMove)}
-	err = cmd.ExecuteCmdShowOutput()
-	errout = cmd.GetStdErr()
-	if err != nil || errout != "" {
-		return fmt.Errorf("%s", errout)
+	stdout, err := runCommandWithShell(untarFileAndMove)
+	if err != nil {
+		return err
 	}
-	fmt.Println(cmd.GetStdOutput())
+	fmt.Println(stdout)
 
 	return nil
 }
@@ -504,4 +538,19 @@ func (u *UbuntuOS) IsKubeEdgeProcessRunning(proc string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+// runCommandWithShell executes the given command with "sh -c".
+// It returns an error if the command outputs anything on the stderr.
+func runCommandWithShell(command string) (string, error) {
+	cmd := &Command{Cmd: exec.Command("sh", "-c", command)}
+	err := cmd.ExecuteCmdShowOutput()
+	if err != nil {
+		return "", err
+	}
+	errout := cmd.GetStdErr()
+	if errout != "" {
+		return "", fmt.Errorf("%s", errout)
+	}
+	return cmd.GetStdOutput(), nil
 }

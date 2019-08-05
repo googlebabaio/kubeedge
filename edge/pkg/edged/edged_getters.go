@@ -32,16 +32,19 @@ import (
 
 	"github.com/kubeedge/beehive/pkg/common/log"
 
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	utilfile "k8s.io/kubernetes/pkg/util/file"
-	"k8s.io/kubernetes/pkg/volume/util"
+	"k8s.io/kubernetes/pkg/kubelet/config"
+	"k8s.io/kubernetes/pkg/util/mount"
+	utilfile "k8s.io/utils/path"
 )
 
 //constants for Kubelet
 const (
-	DefaultKubeletPluginsDirName = "plugins"
-	DefaultKubeletVolumesDirName = "volumes"
-	DefaultKubeletPodsDirName    = "pods"
+	DefaultKubeletPluginsDirName             = "plugins"
+	DefaultKubeletPluginsRegistrationDirName = "plugins_registry"
+	DefaultKubeletVolumesDirName             = "volumes"
+	DefaultKubeletPodsDirName                = "pods"
 )
 
 // getRootDir returns the full path to the directory under which kubelet can
@@ -65,6 +68,14 @@ func (e *edged) getPluginsDir() string {
 // For per-pod plugin data, see getPodPluginDir.
 func (e *edged) getPluginDir(pluginName string) string {
 	return path.Join(e.getPluginsDir(), pluginName)
+}
+
+// getPluginsRegistrationDir returns the full path to the directory under which
+// plugins socket should be placed to be registered.
+// More information is available about plugin registration in the pluginwatcher
+// module
+func (e *edged) getPluginsRegistrationDir() string {
+	return filepath.Join(e.getRootDir(), DefaultKubeletPluginsRegistrationDirName)
 }
 
 // getPodsDir returns the full path to the directory under which pod
@@ -138,7 +149,7 @@ func (e *edged) getPodVolumePathListFromDisk(podUID types.UID) ([]string, error)
 	volumes := []string{}
 	podVolDir := e.getPodVolumesDir(podUID)
 
-	if pathExists, pathErr := util.PathExists(podVolDir); pathErr != nil {
+	if pathExists, pathErr := mount.PathExists(podVolDir); pathErr != nil {
 		return volumes, fmt.Errorf("Error checking if path %q exists: %v", podVolDir, pathErr)
 	} else if !pathExists {
 		log.LOGGER.Warnf("Path %q does not exist", podVolDir)
@@ -162,4 +173,41 @@ func (e *edged) getPodVolumePathListFromDisk(podUID types.UID) ([]string, error)
 		}
 	}
 	return volumes, nil
+}
+
+// GetPodDir returns the full path to the per-pod data directory for the
+// specified pod. This directory may not exist if the pod does not exist.
+func (e *edged) GetPodDir(podUID types.UID) string {
+	return e.getPodDir(podUID)
+}
+
+// GetExtraSupplementalGroupsForPod returns a list of the extra
+// supplemental groups for the Pod. These extra supplemental groups come
+// from annotations on persistent volumes that the pod depends on.
+func (e *edged) GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64 {
+	return e.volumeManager.GetExtraSupplementalGroupsForPod(pod)
+}
+
+func (e *edged) getPodContainerDir(podUID types.UID, ctrName string) string {
+	return filepath.Join(e.getPodDir(podUID), config.DefaultKubeletContainersDirName, ctrName)
+}
+
+// podVolumesSubpathsDirExists returns true if the pod volume-subpaths directory for
+// a given pod exists
+func (e *edged) podVolumeSubpathsDirExists(podUID types.UID) (bool, error) {
+	podVolDir := e.getPodVolumeSubpathsDir(podUID)
+
+	if pathExists, pathErr := mount.PathExists(podVolDir); pathErr != nil {
+		return true, fmt.Errorf("Error checking if path %q exists: %v", podVolDir, pathErr)
+	} else if !pathExists {
+		return false, nil
+	}
+	return true, nil
+}
+
+// getPodVolumesSubpathsDir returns the full path to the per-pod subpaths directory under
+// which subpath volumes are created for the specified pod.  This directory may not
+// exist if the pod does not exist or subpaths are not specified.
+func (e *edged) getPodVolumeSubpathsDir(podUID types.UID) string {
+	return filepath.Join(e.getPodDir(podUID), config.DefaultKubeletVolumeSubpathsDirName)
 }

@@ -32,17 +32,13 @@ type WebSocketConfig struct {
 	HandshakeTimeout time.Duration
 	ReadDeadline     time.Duration
 	WriteDeadline    time.Duration
-	ExtendHeader     http.Header
 }
 
 //ControllerConfig defines controller configuration object type
 type ControllerConfig struct {
 	Protocol        string
 	HeartbeatPeriod time.Duration
-	RefreshInterval time.Duration
 	CloudhubURL     string
-	AuthInfosPath   string
-	PlacementURL    string
 	ProjectID       string
 	NodeID          string
 }
@@ -135,8 +131,6 @@ func getWebSocketConfig() error {
 	}
 	edgeHubConfig.WSConfig.HandshakeTimeout = time.Duration(handshakeTimeout) * time.Second
 
-	edgeHubConfig.WSConfig.ExtendHeader = getExtendHeader()
-
 	return nil
 }
 
@@ -155,13 +149,6 @@ func getControllerConfig() error {
 	}
 	edgeHubConfig.CtrConfig.HeartbeatPeriod = time.Duration(heartbeat) * time.Second
 
-	interval, err := config.CONFIG.GetValue("edgehub.controller.refresh-ak-sk-interval").ToInt()
-	if err != nil {
-		log.LOGGER.Warnf("Failed to get refresh-ak-sk-interval for controller client: %v", err)
-		interval = refreshInterval
-	}
-	edgeHubConfig.CtrConfig.RefreshInterval = time.Duration(interval) * time.Minute
-
 	projectID, err := config.CONFIG.GetValue("edgehub.controller.project-id").ToString()
 	if err != nil {
 		return fmt.Errorf("failed to get project id for controller client: %v", err)
@@ -173,19 +160,6 @@ func getControllerConfig() error {
 		return fmt.Errorf("failed to get node id for controller client: %v", err)
 	}
 	edgeHubConfig.CtrConfig.NodeID = nodeID
-
-	placementURL, err := config.CONFIG.GetValue("edgehub.controller.placement-url").ToString()
-	if err != nil {
-		return fmt.Errorf("failed to get placement url for controller client: %v", err)
-	}
-	edgeHubConfig.CtrConfig.PlacementURL = placementURL
-
-	authInfoPath, err := config.CONFIG.GetValue("edgehub.controller.auth-info-files-path").ToString()
-	if err != nil {
-		log.LOGGER.Warnf("Failed to get auth info : %v", err)
-		authInfoPath = authInfoFilesPathDefault
-	}
-	edgeHubConfig.CtrConfig.AuthInfosPath = authInfoPath
 
 	return nil
 }

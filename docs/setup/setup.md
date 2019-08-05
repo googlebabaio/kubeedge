@@ -18,6 +18,8 @@
     - --insecure-bind-address=0.0.0.0
     ```
 
++ **Go** The minimum required go version is 1.12. You can install this version by using [this website.](https://golang.org/dl/) 
+
 + (**Optional**)KubeEdge also supports https connection to Kubernetes apiserver. Follow the steps in [Kubernetes Documentation](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/) to create the kubeconfig file.
 
   Enter the path to kubeconfig file in controller.yaml
@@ -110,6 +112,22 @@ The cert/key will be generated in the `/etc/kubeedge/ca` and `/etc/kubeedge/cert
 We have provided a sample node.json to add a node in kubernetes. Please make sure edge-node is added in kubernetes. Run below steps to add edge-node.
 
 + Modify the `$GOPATH/src/github.com/kubeedge/kubeedge/build/node.json` file and change `metadata.name` to the name of the edge node
++ Make sure role is set to edge for the node. For this a key of the form `"node-role.kubernetes.io/edge"` must be present in `labels` tag of `metadata`.
++ Please ensure to add the label `node-role.kubernetes.io/edge` to the `build/node.json` file.
+    ```script
+    {
+      "kind": "Node",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
+        "labels": {
+          "name": "edge-node",
+          "node-role.kubernetes.io/edge": ""
+        }
+      }
+    }
+    ```
++ If role is not set for the node, the pods, configmaps and secrets created/updated in the cloud cannot be synced with the node they are targeted for.
 + Deploy node
     ```shell
     kubectl apply -f $GOPATH/src/github.com/kubeedge/kubeedge/build/node.json
@@ -127,7 +145,7 @@ We have provided a sample node.json to add a node in kubernetes. Please make sur
     ```
 
     KubeEdge can also be cross compiled to run on ARM based processors.
-    Please follow the instructions given below or click [Cross Compilation](cross-compilation.html) for detailed instructions.
+    Please follow the instructions given below or click [Cross Compilation](cross-compilation.md) for detailed instructions.
 
     ```shell
     cd $GOPATH/src/github.com/kubeedge/kubeedge/edge

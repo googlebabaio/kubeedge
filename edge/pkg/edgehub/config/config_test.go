@@ -18,17 +18,18 @@ package config
 
 import (
 	"net/http"
-	"os"
 	"reflect"
-
 	"testing"
 	"time"
 
+	bhConfig "github.com/kubeedge/beehive/pkg/common/config"
+	bhUtil "github.com/kubeedge/beehive/pkg/common/util"
 	"github.com/kubeedge/kubeedge/edge/pkg/common/util"
 )
 
-//This statement will load the config from the config files & prevent the test case from panicking
-var conf = util.LoadConfig()
+const (
+	defaultProjectID = "e632aba927ea4ac2b575ec1603d56f10"
+)
 
 //testYamlGenerator is a structure which is used to generate the test YAML file to test Edgehub config components
 type testYamlGenerator struct {
@@ -73,8 +74,6 @@ type controllerConfigYaml struct {
 	HeartbeatPeroid string `yaml:"heartbeat,omitempty"`
 	RefreshInterval string `yaml:"refresh-ak-sk-interval,omitempty"`
 	CloudhubURL     string `yaml:"cloud-hub-url"`
-	AuthInfosPath   string `yaml:"auth-info-files-path,omitempty"`
-	PlacementURL    string `yaml:"placement-url,omitempty"`
 	ProjectID       string `yaml:"project-id,omitempty"`
 	NodeID          string `yaml:"node-id,omitempty"`
 }
@@ -84,6 +83,28 @@ type edgeHubConfigYaml struct {
 	WSConfig   webSocketConfigYaml  `yaml:"websocket"`
 	QuicConfig quicConfigYaml       `yaml:"quic"`
 	CtrConfig  controllerConfigYaml `yaml:"controller"`
+}
+
+func getConfigDirectory() string {
+	if config, err := bhConfig.CONFIG.GetValue("config-path").ToString(); err == nil {
+		return config
+	}
+
+	if config, err := bhConfig.CONFIG.GetValue("GOARCHAIUS_CONFIG_PATH").ToString(); err == nil {
+		return config
+	}
+
+	return bhUtil.GetCurrentDirectory()
+}
+
+var restoreConfig map[string]interface{}
+
+func init() {
+	restoreConfig = bhConfig.CONFIG.GetConfigurations()
+}
+
+func restoreConfigBack() {
+	util.GenerateTestYaml(restoreConfig, getConfigDirectory()+"/conf", "edge")
 }
 
 //TestGetConfig  function loads the testing config file  tests whether the edgeHubConfig variable is loaded correctly with the values from the config file
@@ -119,9 +140,7 @@ func TestGetConfig(t *testing.T) {
 						Protocol:        "websocket",
 						HeartbeatPeroid: "150",
 						RefreshInterval: "15",
-						AuthInfosPath:   "/var/IEF/secret",
-						PlacementURL:    "https://10.154.193.32:7444/v1/placement_external/message_queue",
-						ProjectID:       "e632aba927ea4ac2b575ec1603d56f10",
+						ProjectID:       defaultProjectID,
 						NodeID:          "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
 					},
 				},
@@ -134,7 +153,6 @@ func TestGetConfig(t *testing.T) {
 					HandshakeTimeout: 500 * time.Second,
 					WriteDeadline:    100 * time.Second,
 					ReadDeadline:     100 * time.Second,
-					ExtendHeader:     http.Header{},
 				},
 				QcConfig: QuicConfig{
 					URL:              "127.0.0.1:10001",
@@ -148,10 +166,7 @@ func TestGetConfig(t *testing.T) {
 				CtrConfig: ControllerConfig{
 					Protocol:        "websocket",
 					HeartbeatPeriod: 150 * time.Second,
-					RefreshInterval: 15 * time.Minute,
-					AuthInfosPath:   "/var/IEF/secret",
-					PlacementURL:    "https://10.154.193.32:7444/v1/placement_external/message_queue",
-					ProjectID:       "e632aba927ea4ac2b575ec1603d56f10",
+					ProjectID:       defaultProjectID,
 					NodeID:          "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
 				},
 			}},
@@ -172,10 +187,9 @@ func TestGetConfig(t *testing.T) {
 						KeyFilePath:  "/tmp/edge.key",
 					},
 					controllerConfigYaml{
-						Protocol:     "websocket",
-						PlacementURL: "https://10.154.193.32:7444/v1/placement_external/message_queue",
-						ProjectID:    "e632aba927ea4ac2b575ec1603d56f10",
-						NodeID:       "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
+						Protocol:  "websocket",
+						ProjectID: defaultProjectID,
+						NodeID:    "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
 					},
 				},
 			},
@@ -187,7 +201,6 @@ func TestGetConfig(t *testing.T) {
 					HandshakeTimeout: 60 * time.Second,
 					WriteDeadline:    15 * time.Second,
 					ReadDeadline:     15 * time.Second,
-					ExtendHeader:     http.Header{},
 				},
 				QcConfig: QuicConfig{
 					URL:              "127.0.0.1:10001",
@@ -200,29 +213,20 @@ func TestGetConfig(t *testing.T) {
 				},
 				CtrConfig: ControllerConfig{
 					Protocol:        "websocket",
-					AuthInfosPath:   "/var/IEF/secret",
 					HeartbeatPeriod: 15 * time.Second,
-					RefreshInterval: 10 * time.Minute,
-					PlacementURL:    "https://10.154.193.32:7444/v1/placement_external/message_queue",
-					ProjectID:       "e632aba927ea4ac2b575ec1603d56f10",
+					ProjectID:       defaultProjectID,
 					NodeID:          "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
 				},
 			}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := util.GenerateTestYaml(tt.test, "/tmp/kubeedge/testData", "edge")
+			err := util.GenerateTestYaml(tt.test, getConfigDirectory()+"/conf", "edge")
 			if err != nil {
 				t.Error("Unable to generate test YAML file: ", err)
 			}
-			err = util.LoadConfig("/tmp/kubeedge/testData")
-			if err != nil {
-				t.Error("Unable to load the configuration file: ", err)
-			}
-			err = os.RemoveAll("/tmp/kubeedge/")
-			if err != nil {
-				t.Error("Unable to delete the temporary directory: ", err)
-			}
+			// time to let config be synced again
+			time.Sleep(10 * time.Second)
 			err = getWebSocketConfig()
 			if err != nil {
 				t.Errorf("getWebSocketConfig() returns an error: %v", err)
@@ -336,18 +340,12 @@ func Test_getWebSocketConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := util.GenerateTestYaml(tt.test, "/tmp/kubeedge/testData", "edge")
+			err := util.GenerateTestYaml(tt.test, getConfigDirectory()+"/conf", "edge")
 			if err != nil {
 				t.Error("Unable to generate test YAML file: ", err)
 			}
-			err = util.LoadConfig("/tmp/kubeedge/testData")
-			if err != nil {
-				t.Error("Unable to load the configuration file")
-			}
-			err = os.RemoveAll("/tmp/kubeedge")
-			if err != nil {
-				t.Error("Unable to delete the temporary directory: ", err)
-			}
+			// time to let config be synced again
+			time.Sleep(10 * time.Second)
 			if err := getWebSocketConfig(); (err != nil) != tt.wantErr {
 				t.Errorf("getWebSocketConfig() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -373,9 +371,7 @@ func Test_getControllerConfig(t *testing.T) {
 						Protocol:        "websocket",
 						HeartbeatPeroid: "150",
 						RefreshInterval: "15",
-						AuthInfosPath:   "/var/IEF/secret",
-						PlacementURL:    "https://10.154.193.32:7444/v1/placement_external/message_queue",
-						ProjectID:       "e632aba927ea4ac2b575ec1603d56f10",
+						ProjectID:       defaultProjectID,
 						NodeID:          "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
 					},
 				},
@@ -389,32 +385,13 @@ func Test_getControllerConfig(t *testing.T) {
 					webSocketConfigYaml{},
 					quicConfigYaml{},
 					controllerConfigYaml{
-						Protocol:     "websocket",
-						PlacementURL: "https://10.154.193.32:7444/v1/placement_external/message_queue",
-						ProjectID:    "e632aba927ea4ac2b575ec1603d56f10",
-						NodeID:       "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
+						Protocol:  "websocket",
+						ProjectID: defaultProjectID,
+						NodeID:    "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
 					},
 				},
 			},
 			false},
-
-		//Negative Testcase with no placementURL  provided
-		{"Test_getControllerConfig3: No placementURL  provided ",
-			testYamlGenerator{
-				edgeHubConfigYaml{
-					webSocketConfigYaml{},
-					quicConfigYaml{},
-					controllerConfigYaml{
-						Protocol:        "websocket",
-						HeartbeatPeroid: "150",
-						RefreshInterval: "15",
-						AuthInfosPath:   "/var/IEF/secret",
-						ProjectID:       "e632aba927ea4ac2b575ec1603d56f10",
-						NodeID:          "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
-					},
-				},
-			},
-			true},
 
 		//Negative Testcase with no projectID  provided
 		{"Test_getControllerConfig4: No projectID provided ",
@@ -426,8 +403,6 @@ func Test_getControllerConfig(t *testing.T) {
 						Protocol:        "websocket",
 						HeartbeatPeroid: "150",
 						RefreshInterval: "15",
-						AuthInfosPath:   "/var/IEF/secret",
-						PlacementURL:    "https://10.154.193.32:7444/v1/placement_external/message_queue",
 						NodeID:          "fb4ebb70-2783-42b8-b3ef-63e2fd6d242e",
 					},
 				},
@@ -444,9 +419,7 @@ func Test_getControllerConfig(t *testing.T) {
 						Protocol:        "websocket",
 						HeartbeatPeroid: "150",
 						RefreshInterval: "15",
-						AuthInfosPath:   "/var/IEF/secret",
-						PlacementURL:    "https://10.154.193.32:7444/v1/placement_external/message_queue",
-						ProjectID:       "e632aba927ea4ac2b575ec1603d56f10",
+						ProjectID:       defaultProjectID,
 					},
 				},
 			},
@@ -454,18 +427,12 @@ func Test_getControllerConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := util.GenerateTestYaml(tt.test, "/tmp/kubeedge/testData", "edge")
+			err := util.GenerateTestYaml(tt.test, getConfigDirectory()+"/conf", "edge")
 			if err != nil {
 				t.Error("Unable to generate test YAML file: ", err)
 			}
-			err = util.LoadConfig("/tmp/kubeedge/testData")
-			if err != nil {
-				t.Error("Unable to load the configuration file")
-			}
-			err = os.RemoveAll("/tmp/kubeedge")
-			if err != nil {
-				t.Error("Unable to delete the temporary directory: ", err)
-			}
+			// time to let config be synced again
+			time.Sleep(10 * time.Second)
 			if err := getControllerConfig(); (err != nil) != tt.wantErr {
 				t.Errorf("getControllerConfig() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -515,21 +482,17 @@ func Test_getExtendHeader(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := util.GenerateTestYaml(tt.test, "/tmp/kubeedge/testData", "edge")
+			err := util.GenerateTestYaml(tt.test, getConfigDirectory()+"/conf", "edge")
 			if err != nil {
 				t.Error("Unable to generate test YAML file: ", err)
 			}
-			err = util.LoadConfig("/tmp/kubeedge/testData")
-			if err != nil {
-				t.Error("Unable to load the configuration file ", err)
-			}
-			err = os.RemoveAll("/tmp/kubeedge")
-			if err != nil {
-				t.Error("Unable to delete the temporary directory: ", err)
-			}
+			// time to let config be synced again
+			time.Sleep(10 * time.Second)
 			if got := getExtendHeader(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getExtendHeader() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+
+	restoreConfigBack()
 }

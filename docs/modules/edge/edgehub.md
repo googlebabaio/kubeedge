@@ -2,7 +2,7 @@
 
 ## Overview
 
-Edge hub is a web socket client, which is responsible for interacting with Huawei Cloud IEF service.
+Edge hub is responsible for interacting with CloudHub component present in the cloud. It can connect to the CloudHub using either a web-socket connection or using [QUIC](https://quicwg.org/ops-drafts/draft-ietf-quic-applicability.html) protocol.
 It supports functions like sync cloud side resources update, report edged side host and device status changes.
 
 It acts as the communication link between the edge and the cloud.
@@ -10,25 +10,12 @@ It forwards the messages received from the cloud to the corresponding module at 
 
 The main functions performed by edgehub are :-
 
-- Get CloudHub URL
 - Keep Alive
 - Publish Client Info
 - Route to Cloud 
 - Route to Edge
 
 
-## Get CloudHub URL
-
-The main responsibility of get cloudHub URL is to contact the placement server and get the URL of cloudHub.   
-
-1. A HTTPS client is created using the certificates provided 
-2. A get request is sent to the placement URL 
-3. ProjectID and NodeID are added to the body of the response received from the placement URL to form the cloudHub URL.
-
-```go
-bodyBytes, _ := ioutil.ReadAll(resp.Body)
-url := fmt.Sprintf("%s/%s/%s/events", string(bodyBytes), ehc.config.ProjectID, ehc.config.NodeID)
-```
 ## Keep Alive
 
 A keep-alive message or heartbeat is sent to cloudHub after every heartbeatPeriod.
@@ -78,3 +65,11 @@ The major steps involved in this process are as follows :-
 - If it is a response message then the message is sent to the syncKeep channel
 
 ![Route to Edge](../../images/edgehub/route-to-edge.png)
+
+
+## Usage
+
+EdgeHub can be configured to communicate in two ways as mentioned below:
+
+- **Through websocket protocol**: Click [here](https://github.com/kubeedge/kubeedge/blob/master/docs/proposals/quic-design.md#edgehub-connect-to-cloudhub-through-websocket-protocol) for details.
+- **Through QUIC protocol**: Click [here](https://github.com/kubeedge/kubeedge/blob/master/docs/proposals/quic-design.md#edgehub-connect-to-cloudhub-through-quic) for details.
