@@ -1,8 +1,9 @@
 package config
 
 import (
+	"k8s.io/klog"
+
 	"github.com/kubeedge/beehive/pkg/common/config"
-	"github.com/kubeedge/beehive/pkg/common/log"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/constants"
 )
 
@@ -15,26 +16,26 @@ var DeviceEventBuffer int
 // DeviceModelEventBuffer is the size of channel which save devicemodel event from k8s
 var DeviceModelEventBuffer int
 
-func init() {
+func InitBufferConfig() {
 	if psb, err := config.CONFIG.GetValue("devicecontroller.buffer.update-device-status").ToInt(); err != nil {
 		UpdateDeviceStatusBuffer = constants.DefaultUpdateDeviceStatusBuffer
 	} else {
 		UpdateDeviceStatusBuffer = psb
 	}
-	log.LOGGER.Infof("Update devicecontroller.buffer.update-device-status: %d", UpdateDeviceStatusBuffer)
+	klog.Infof("Update devicecontroller.buffer.update-device-status: %d", UpdateDeviceStatusBuffer)
 
 	if deb, err := config.CONFIG.GetValue("devicecontroller.buffer.device-event").ToInt(); err != nil {
 		DeviceEventBuffer = constants.DefaultDeviceEventBuffer
 	} else {
 		DeviceEventBuffer = deb
 	}
-	log.LOGGER.Infof("Update devicecontroller.buffer.device-event: %d", DeviceEventBuffer)
+	klog.Infof("Update devicecontroller.buffer.device-event: %d", DeviceEventBuffer)
 
 	if dmeb, err := config.CONFIG.GetValue("devicecontroller.buffer.device-model-event").ToInt(); err != nil {
 		DeviceModelEventBuffer = constants.DefaultDeviceModelEventBuffer
 	} else {
 		DeviceModelEventBuffer = dmeb
 	}
-	log.LOGGER.Infof("Update devicecontroller.buffer.device-model-event: %d", DeviceModelEventBuffer)
+	klog.Infof("Update devicecontroller.buffer.device-model-event: %d", DeviceModelEventBuffer)
 
 }

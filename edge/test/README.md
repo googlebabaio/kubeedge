@@ -38,10 +38,10 @@ Following sections will explain the procedure to test the kubeedge with testMana
 ### Compile
 
 ```shell
-# generate the `edge_core` binary 
+# generate the `edgecore` binary 
 make
 # or
-make edge_core
+make edgecore
 ```
 ### Configure
 
@@ -83,7 +83,7 @@ edgehub:
         auth-info-files-path: /var/IEF/secret
         placement-url: https://10.154.193.32:7444/v1/placement_external/message_queue
         project-id: e632aba927ea4ac2b575ec1603d56f10
-        node-id: fb4ebb70-2783-42b8-b3ef-63e2fd6d242e
+        node-id: edge-node
 
 edged:
     register-node-namespace: default
@@ -100,10 +100,10 @@ edged:
 ```
 
 ```bash
-# run edge_core
-./edge_core
+# run edgecore
+./edgecore
 # or
-nohup ./edge_core > edge_core.log 2>&1 &
+nohup ./edgecore > edgecore.log 2>&1 &
 ```
 
 ### Test kubeedge with External MQTT Server
@@ -126,10 +126,10 @@ apt install -y mosquitto
 ```bash
 # run mosquitto
 mosquitto -d -p 1883
-# run edge_core
-./edge_core
+# run edgecore
+./edgecore
 # or
-nohup ./edge_core > edge_core.log 2>&1 &
+nohup ./edgecore > edgecore.log 2>&1 &
 ```
 
 ### Verify

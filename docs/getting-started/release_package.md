@@ -8,7 +8,7 @@
 
 + [Creating cluster with kubeadm](<https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/>)
 
-+ After initializing Kubernetes master, we need to expose insecure port 8080 for edgecontroller/kubectl to work with http connection to Kubernetes apiserver.
++ After initializing Kubernetes master, we need to expose insecure port 8080 for cloudcore/kubectl to work with http connection to Kubernetes apiserver.
   Please follow below steps to enable http port in Kubernetes apiserver.
 
   ```shell
@@ -73,9 +73,9 @@
   ```shell
       cd /etc/kubeedge/cloud
       # run edge controller
-      # `conf/` should be in the same directory where edgecontroller resides
-      # verify the configurations before running cloud(edgecontroller)
-      ./edgecontroller
+      # `conf/` should be in the same directory where cloudcore resides
+      # verify the configurations before running cloud(cloudcore)
+      ./cloudcore
   ```
   ## Edge Vm
   ### Prerequisites
@@ -110,7 +110,7 @@
    + Modify the `/etc/kubeedge/edge/conf/edge.yaml` configuration file
        + Replace `edgehub.websocket.certfile` and `edgehub.websocket.keyfile` with your own certificate path
        + Update the IP address of the master in the `websocket.url` field. 
-       + replace `fb4ebb70-2783-42b8-b3ef-63e2fd6d242e` with edge node name in edge.yaml for the below fields :
+       + replace `edge-node` with edge node name in edge.yaml for the below fields :
            + `websocket:URL`
            + `controller:node-id`
            + `edged:hostname-override`
@@ -126,16 +126,16 @@
             + `kubelet-root-dir: /var/run/kubelet/`
    + Run edge   
    ```shell
-       # run edge_core
+       # run edgecore
            # `conf/` should be in the same directory as the cloned KubeEdge repository
            cd /etc/kubeedge/edge
-           # verify the configurations before running edge(edge_core)
-           ./edge_core
+           # verify the configurations before running edge(edgecore)
+           ./edgecore
            # or
-           nohup ./edge_core > edge_core.log 2>&1 &
+           nohup ./edgecore > edgecore.log 2>&1 &
           
    ```
-    **Note**: Running edge_core on ARM based processors,follow the above steps as mentioned for Edge Vm
+    **Note**: Running edgecore on ARM based processors,follow the above steps as mentioned for Edge Vm
    ```shell
        VERSION="v0.3.0"
        OS="linux"

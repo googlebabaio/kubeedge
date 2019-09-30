@@ -4,7 +4,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/kubeedge/beehive/pkg/common/log"
+	"k8s.io/klog"
+
 	"github.com/kubeedge/beehive/pkg/core"
 	bcontext "github.com/kubeedge/beehive/pkg/core/context"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/config"
@@ -17,7 +18,7 @@ type DeviceController struct {
 	stopChan chan bool
 }
 
-func init() {
+func Register() {
 	deviceController := DeviceController{}
 	core.Register(&deviceController)
 }
@@ -36,14 +37,17 @@ func (dctl *DeviceController) Group() string {
 func (dctl *DeviceController) Start(c *bcontext.Context) {
 	config.Context = c
 	dctl.stopChan = make(chan bool)
+
+	initConfig()
+
 	downstream, err := controller.NewDownstreamController()
 	if err != nil {
-		log.LOGGER.Errorf("New downstream controller failed with error: %s", err)
+		klog.Errorf("New downstream controller failed with error: %s", err)
 		os.Exit(1)
 	}
 	upstream, err := controller.NewUpstreamController(downstream)
 	if err != nil {
-		log.LOGGER.Errorf("new upstream controller failed with error: %s", err)
+		klog.Errorf("new upstream controller failed with error: %s", err)
 		os.Exit(1)
 	}
 
@@ -61,4 +65,12 @@ func (dctl *DeviceController) Start(c *bcontext.Context) {
 func (dctl *DeviceController) Cleanup() {
 	dctl.stopChan <- true
 	config.Context.Cleanup(dctl.Name())
+}
+
+func initConfig() {
+	config.InitBufferConfig()
+	config.InitContextConfig()
+	config.InitKubeConfig()
+	config.InitLoadConfig()
+	config.InitMessageLayerConfig()
 }

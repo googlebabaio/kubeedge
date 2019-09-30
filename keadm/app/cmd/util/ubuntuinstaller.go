@@ -487,7 +487,7 @@ func (u *UbuntuOS) InstallKubeEdge() error {
 	}
 
 SKIPDOWNLOADAND:
-	untarFileAndMove := fmt.Sprintf("cd %s && tar -C %s -xvzf %s && cp %s/kubeedge/edge/%s /usr/local/bin/.", KubeEdgePath, KubeEdgePath, filename, KubeEdgePath, KubeEdgeBinaryName)
+	untarFileAndMove := fmt.Sprintf("cd %s && tar -C %s -xvzf %s && cp %skubeedge/edge/%s /usr/local/bin/.", KubeEdgePath, KubeEdgePath, filename, KubeEdgePath, KubeEdgeBinaryName)
 	stdout, err := runCommandWithShell(untarFileAndMove)
 	if err != nil {
 		return err
@@ -498,7 +498,7 @@ SKIPDOWNLOADAND:
 }
 
 //RunEdgeCore sets the environment variable GOARCHAIUS_CONFIG_PATH for the configuration path
-//and the starts edge_core with logs being captured
+//and the starts edgecore with logs being captured
 func (u *UbuntuOS) RunEdgeCore() error {
 	binExec := fmt.Sprintf("chmod +x /usr/local/bin/%s && %s > %s/kubeedge/edge/%s.log 2>&1 &", KubeEdgeBinaryName, KubeEdgeBinaryName, KubeEdgePath, KubeEdgeBinaryName)
 	cmd := &Command{Cmd: exec.Command("sh", "-c", binExec)}

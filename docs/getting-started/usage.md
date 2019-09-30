@@ -8,7 +8,7 @@
 
 + [Creating cluster with kubeadm](<https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/>)
 
-+ After initializing Kubernetes master, we need to expose insecure port 8080 for edgecontroller/kubectl to work with http connection to Kubernetes apiserver.
++ After initializing Kubernetes master, we need to expose insecure port 8080 for cloudcore/kubectl to work with http connection to Kubernetes apiserver.
   Please follow below steps to enable http port in Kubernetes apiserver.
 
     ```shell
@@ -93,9 +93,13 @@ The cert/key will be generated in the `/etc/kubeedge/ca` and `/etc/kubeedge/cert
     cd $GOPATH/src/github.com/kubeedge/kubeedge/cloud
     # run edge controller
     # `conf/` should be in the same directory as the cloned KubeEdge repository
-    # verify the configurations before running cloud(edgecontroller)
-    ./edgecontroller
+    # verify the configurations before running cloud(cloudcore)
+    ./cloudcore
     ```
+
++ (**Optional**)Run `admission`, this feature is still being evaluated.
+    please read the docs in [install the admission webhook](../../build/admission/README.md)
+
 
 #### [Run as Kubernetes deployment](../../build/cloud/README.md)
 
@@ -139,12 +143,13 @@ We have provided a sample node.json to add a node in kubernetes. Please make sur
 
     **Note:** If you are using the smaller version of the binary, it is compressed using upx, therefore the possible side effects of using upx compressed binaries like more RAM usage, 
     lower performance, whole code of program being loaded instead of it being on-demand, not allowing sharing of memory which may cause the code to be loaded to memory 
-    more than once etc. are applicable here as well.
+    more than once etc. are applicable here as well. There are options in upx-ucl like --best, but it has a drawback of taking too long for big files, we are using --9 since it takes less time.
+    Please refer to upx-ucl --help for more information.
 
 + Modify the `$GOPATH/src/github.com/kubeedge/kubeedge/edge/conf/edge.yaml` configuration file
     + Replace `edgehub.websocket.certfile` and `edgehub.websocket.keyfile` with your own certificate path
     + Update the IP address of the master in the `websocket.url` field. 
-    + replace `fb4ebb70-2783-42b8-b3ef-63e2fd6d242e` with edge node name in edge.yaml for the below fields :
+    + replace `edge-node` with edge node name in edge.yaml for the below fields :
         + `websocket:URL`
         + `controller:node-id`
         + `edged:hostname-override`
@@ -157,12 +162,12 @@ We have provided a sample node.json to add a node in kubernetes. Please make sur
     # or run emqx edge
     # emqx start
     
-    # run edge_core
+    # run edgecore
     # `conf/` should be in the same directory as the cloned KubeEdge repository
-    # verify the configurations before running edge(edge_core)
-    ./edge_core
+    # verify the configurations before running edge(edgecore)
+    ./edgecore
     # or
-    nohup ./edge_core > edge_core.log 2>&1 &
+    nohup ./edgecore > edgecore.log 2>&1 &
     ```
 
     **Note:** Please run edge using the users who have root permission.

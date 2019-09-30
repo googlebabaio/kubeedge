@@ -18,10 +18,9 @@ cd `dirname $0`
 workdir=`pwd`
 cd $workdir
 
-debugflag="-v 6 -alsologtostderr"
-
 compilemodule=$1
 runtest=$2
+debugflag="-test.v -ginkgo.v"
 
 export MASTER_IP=121.244.95.60
 #setup env
@@ -31,15 +30,23 @@ cd ../
 cat >config.json<<END
 {
         "image_url": ["nginx", "hello-world"],
-        "k8smasterforkubeedge":"http://$MASTER_IP:12418"
+        "k8smasterforkubeedge":"http://$MASTER_IP:12418",
+         "dockerhubusername":"user",
+         "dockerhubpassword":"password",
+         "mqttendpoint":"tcp://127.0.0.1:1884"
 }
 END
 
 if [ $# -eq 0 ]
   then
     #run testcase
-    ./deployment/deployment.test $debugflag 2>&1 | tee /tmp/fast_test.log && cat /tmp/fast_test.log >> /tmp/testcase.log && :> /tmp/fast_test.log
-    ./edgesite/edgesite.test $debugflag 2>&1 | tee /tmp/fast_test.log && cat /tmp/fast_test.log >> /tmp/testcase.log && :> /tmp/fast_test.log
+    ./deployment/deployment.test $debugflag 2>&1 | tee -a /tmp/testcase.log
+    ./edgesite/edgesite.test $debugflag 2>&1 | tee -a /tmp/testcase.log
 else
-    ./$compilemodule/$compilemodule.test $debugflag $runtest 2>&1 | tee /tmp/fast_test.log && cat /tmp/fast_test.log >> /tmp/testcase.log && :> /tmp/fast_test.log
+if compilemodule=="bluetooth"
+then
+    ./mapper/bluetooth/bluetooth.test  $debugflag $runtest 2>&1 | tee -a /tmp/testcase.log
+else
+    ./$compilemodule/$compilemodule.test  $debugflag  $runtest 2>&1 | tee -a  /tmp/testcase.log
+fi
 fi

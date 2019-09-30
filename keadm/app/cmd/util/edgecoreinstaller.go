@@ -38,7 +38,7 @@ import (
 type KubeEdgeInstTool struct {
 	Common
 	//CertPath       string
-	EdgeContrlrIP  string
+	CloudCoreIP    string
 	K8SApiServerIP string
 	EdgeNodeID     string
 	RuntimeType    string
@@ -46,7 +46,7 @@ type KubeEdgeInstTool struct {
 }
 
 //InstallTools downloads KubeEdge for the specified verssion
-//and makes the required configuration changes and initiates edge_core.
+//and makes the required configuration changes and initiates edgecore.
 func (ku *KubeEdgeInstTool) InstallTools() error {
 	ku.SetOSInterface(GetOSInterface())
 	ku.SetKubeEdgeVersion(ku.ToolVersion)
@@ -85,13 +85,13 @@ func (ku *KubeEdgeInstTool) createEdgeConfigFiles() error {
 	}
 
 	serverIPAddr := "0.0.0.0"
-	if "" != ku.EdgeContrlrIP {
-		serverIPAddr = ku.EdgeContrlrIP
+	if "" != ku.CloudCoreIP {
+		serverIPAddr = ku.CloudCoreIP
 	}
 
 	url := fmt.Sprintf("wss://%s:10000/%s/%s/events", serverIPAddr, types.DefaultProjectID, edgeID)
 	edgeYaml := &types.EdgeYamlSt{EdgeHub: types.EdgeHubSt{WebSocket: types.WebSocketSt{URL: url}},
-		EdgeD: types.EdgeDSt{Version: types.VendorK8sPrefix + ku.ToolVersion, RuntimeType: ku.RuntimeType, InterfaceName: ku.InterfaceName}}
+		EdgeD: types.EdgeDSt{RuntimeType: ku.RuntimeType, InterfaceName: ku.InterfaceName}}
 
 	if err = types.WriteEdgeYamlFile(KubeEdgeConfigEdgeYaml, edgeYaml); err != nil {
 		return err
@@ -238,7 +238,7 @@ func (ku *KubeEdgeInstTool) deleteNodeFromK8SAPIServer(server string) error {
 	return nil
 }
 
-//TearDown method will remove the edge node from api-server and stop edge_core process
+//TearDown method will remove the edge node from api-server and stop edgecore process
 func (ku *KubeEdgeInstTool) TearDown() error {
 
 	ku.SetOSInterface(GetOSInterface())

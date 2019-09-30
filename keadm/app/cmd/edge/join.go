@@ -32,20 +32,20 @@ var (
 It checks if the pre-requisites are installed already,
 If not installed, this command will help in download,
 install and execute on the host.
-It will also connect with cloud component to receieve 
+It will also connect with cloud component to receive 
 further instructions and forward telemetry data from 
 devices to cloud
 `
 	edgeJoinExample = `
-keadm join --edgecontrollerip=<ip address> --edgenodeid=<unique string as edge identifier>
+keadm join --cloudcoreip=<ip address> --edgenodeid=<unique string as edge identifier>
 
-  - For this command --edgecontrollerip flag is a Mandatory option
+  - For this command --cloudcoreip flag is a Mandatory option
   - This command will download and install the default version of pre-requisites and KubeEdge
 
-keadm join --edgecontrollerip=10.20.30.40 --edgenodeid=testing123 --kubeedge-version=0.2.1 --k8sserverip=50.60.70.80:8080 --interfacename eth0
+keadm join --cloudcoreip=10.20.30.40 --edgenodeid=testing123 --kubeedge-version=0.2.1 --k8sserverip=50.60.70.80:8080 --interfacename eth0
 
 - In case, any flag is used in a format like "--docker-version" or "--docker-version=" (without a value)
-  then default versions shown in help will be choosen. 
+  then default versions shown in help will be chosen. 
   The versions for "--docker-version", "--kubernetes-version" and "--kubeedge-version" flags should be in the
   format "18.06.3", "1.14.0" and "0.2.1" respectively
 `
@@ -98,13 +98,13 @@ func addJoinOtherFlags(cmd *cobra.Command, joinOptions *types.JoinOptions) {
 	cmd.Flags().StringVarP(&joinOptions.K8SAPIServerIPPort, types.K8SAPIServerIPPort, "k", joinOptions.K8SAPIServerIPPort,
 		"IP:Port address of K8S API-Server")
 
-	cmd.Flags().StringVarP(&joinOptions.EdgeControllerIP, types.EdgeControllerIP, "e", joinOptions.EdgeControllerIP,
-		"IP address of KubeEdge edgecontroller")
-	cmd.MarkFlagRequired(types.EdgeControllerIP)
+	cmd.Flags().StringVarP(&joinOptions.CloudCoreIP, types.CloudCoreIP, "e", joinOptions.CloudCoreIP,
+		"IP address of KubeEdge CloudCore")
+	cmd.MarkFlagRequired(types.CloudCoreIP)
 	cmd.Flags().StringVarP(&joinOptions.RuntimeType, types.RuntimeType, "r", joinOptions.RuntimeType,
 		"Container runtime type")
 	cmd.Flags().StringVarP(&joinOptions.EdgeNodeID, types.EdgeNodeID, "i", joinOptions.EdgeNodeID,
-		"KubeEdge Node unique idenfitcation string, If flag not used then the command will generate a unique id on its own")
+		"KubeEdge Node unique identification string, If flag not used then the command will generate a unique id on its own")
 }
 
 // newJoinOptions returns a struct ready for being used for creating cmd join flags.
@@ -128,7 +128,7 @@ func Add2ToolsList(toolList map[string]types.ToolsInstaller, flagData map[string
 		kubeVer = joinOptions.KubeEdgeVersion
 	}
 	toolList["KubeEdge"] = &util.KubeEdgeInstTool{Common: util.Common{ToolVersion: kubeVer}, K8SApiServerIP: joinOptions.K8SAPIServerIPPort,
-		EdgeContrlrIP: joinOptions.EdgeControllerIP, EdgeNodeID: joinOptions.EdgeNodeID, RuntimeType: joinOptions.RuntimeType, InterfaceName: joinOptions.InterfaceName}
+		CloudCoreIP: joinOptions.CloudCoreIP, EdgeNodeID: joinOptions.EdgeNodeID, RuntimeType: joinOptions.RuntimeType, InterfaceName: joinOptions.InterfaceName}
 
 	flgData, ok = flagData[types.DockerVersion]
 	if ok {
@@ -140,7 +140,7 @@ func Add2ToolsList(toolList map[string]types.ToolsInstaller, flagData map[string
 	toolList["MQTT"] = &util.MQTTInstTool{}
 }
 
-//Execute the instalation for each tool and start edge_core
+//Execute the instalation for each tool and start edgecore
 func Execute(toolList map[string]types.ToolsInstaller) error {
 
 	//Install all the required pre-requisite tools

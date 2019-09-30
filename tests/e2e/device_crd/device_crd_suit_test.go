@@ -18,8 +18,6 @@ package device_crd
 
 import (
 	"bytes"
-	"github.com/kubeedge/kubeedge/tests/e2e/constants"
-	"github.com/kubeedge/kubeedge/tests/e2e/utils"
 	"io/ioutil"
 	"net/http"
 	"path"
@@ -29,6 +27,9 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"github.com/kubeedge/kubeedge/tests/e2e/constants"
+	"github.com/kubeedge/kubeedge/tests/e2e/utils"
 )
 
 //context to load config and access across the package
@@ -47,10 +48,11 @@ var (
 
 //Function to run the Ginkgo Test
 func TestEdgecoreAppDeployment(t *testing.T) {
+
 	RegisterFailHandler(Fail)
 	var _ = BeforeSuite(func() {
 		client := &http.Client{}
-		utils.InfoV6("Before Suite Execution")
+		utils.Infof("Before Suite Execution")
 		ctx = utils.NewTestContext(utils.LoadConfig())
 		NodeName = "integration-node-" + utils.GetRandomString(10)
 		nodeSelector = "node-" + utils.GetRandomString(3)
@@ -59,16 +61,16 @@ func TestEdgecoreAppDeployment(t *testing.T) {
 		Expect(utils.GenerateCerts()).Should(BeNil())
 		//Do the neccessary config changes in Cloud and Edge nodes
 		Expect(utils.DeploySetup(ctx, NodeName, "deployment")).Should(BeNil())
-		//Run ./edgecontroller binary
-		Expect(utils.StartEdgeController()).Should(BeNil())
+		//Run ./cloudcore binary
+		Expect(utils.StartCloudCore()).Should(BeNil())
 		//Register the Edge Node to Master
 		Expect(utils.RegisterNodeToMaster(NodeName, ctx.Cfg.K8SMasterForKubeEdge+constants.NodeHandler, nodeSelector)).Should(BeNil())
-		//Run ./edge_core after node registration
+		//Run ./edgecore after node registration
 		Expect(utils.StartEdgeCore()).Should(BeNil())
 		//Check node successfully registered or not
 		Eventually(func() string {
 			status := utils.CheckNodeReadyStatus(ctx.Cfg.K8SMasterForKubeEdge+constants.NodeHandler, NodeName)
-			utils.Info("Node Name: %v, Node Status: %v", NodeName, status)
+			utils.Infof("Node Name: %v, Node Status: %v", NodeName, status)
 			return status
 		}, "60s", "4s").Should(Equal("Running"), "Node register to the k8s master is unsuccessfull !!")
 		//Apply the CRDs
@@ -101,7 +103,7 @@ func TestEdgecoreAppDeployment(t *testing.T) {
 		Expect(utils.DeRegisterNodeFromMaster(ctx.Cfg.K8SMasterForKubeEdge+constants.NodeHandler, NodeName)).Should(BeNil())
 		Eventually(func() int {
 			statuscode := utils.CheckNodeDeleteStatus(ctx.Cfg.K8SMasterForKubeEdge+constants.NodeHandler, NodeName)
-			utils.Info("Node Name: %v, Node Statuscode: %v", NodeName, statuscode)
+			utils.Infof("Node Name: %v, Node Statuscode: %v", NodeName, statuscode)
 			return statuscode
 		}, "60s", "4s").Should(Equal(http.StatusNotFound), "Node register to the k8s master is unsuccessfull !!")
 		client := &http.Client{}
@@ -117,9 +119,10 @@ func TestEdgecoreAppDeployment(t *testing.T) {
 		resp, err = client.Do(req)
 		Expect(err).Should(BeNil())
 		Expect(resp.StatusCode).Should(Equal(http.StatusOK))
-		//Run the Cleanup steps to kill edge_core and edgecontroller binaries
+
+		//Run the Cleanup steps to kill edgecore and cloudcore binaries
 		Expect(utils.CleanUp("device_crd")).Should(BeNil())
-		utils.Info("Cleanup is Successfull !!")
+		utils.Infof("Cleanup is Successfull !!")
 	})
 	RunSpecs(t, "kubeedge Device Managemnet Suite")
 }

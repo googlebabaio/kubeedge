@@ -44,6 +44,9 @@ type Config struct {
 	Namespace                      string            `json:"namespace"`
 	ControllerStubPort             int               `json:"controllerstubport"`
 	Protocol                       string            `json:"protocol"`
+	DockerHubUserName              string            `json:"dockerhubusername"`
+	DockerHubPassword              string            `json:"dockerhubpassword"`
+	MqttEndpoint                   string            `json:"mqttendpoint"`
 }
 
 //config struct
@@ -62,7 +65,7 @@ func loadConfigJsonFromPath() *Config {
 	path := getConfigPath()
 	_, err := filepath.Abs(filepath.Dir(path))
 	if err != nil {
-		InfoV6("Failed to get Abs path: %v", err)
+		Infof("Failed to get Abs path: %v", err)
 		panic(err)
 	}
 	var config *Config = &Config{}
