@@ -10,19 +10,17 @@ import (
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"k8s.io/klog"
 
-	"github.com/kubeedge/beehive/pkg/core/context"
+	beehiveContext "github.com/kubeedge/beehive/pkg/core/context"
 	"github.com/kubeedge/beehive/pkg/core/model"
 	"github.com/kubeedge/kubeedge/edge/pkg/common/modules"
 	"github.com/kubeedge/kubeedge/edge/pkg/eventbus/common/util"
 )
 
+const UploadTopic = "SYS/dis/upload_records"
+
 var (
 	// MQTTHub client
 	MQTTHub *Client
-	// ModuleContext variable
-	ModuleContext *context.Context
-	// NodeID stands for node id
-	NodeID string
 	// GroupID stands for group id
 	GroupID string
 	// ConnectedTopic to send connect event
@@ -51,7 +49,7 @@ var (
 		"$hw/events/device/+/state/update",
 		"$hw/events/device/+/twin/+",
 		"$hw/events/node/+/membership/get",
-		"SYS/dis/upload_records",
+		UploadTopic,
 	}
 )
 
@@ -96,22 +94,22 @@ func OnSubMessageReceived(client MQTT.Client, message MQTT.Message) {
 	klog.Infof("OnSubMessageReceived receive msg from topic: %s", message.Topic())
 	// for "$hw/events/device/+/twin/+", "$hw/events/node/+/membership/get", send to twin
 	// for other, send to hub
-	// for "SYS/dis/upload_records", no need to base64 topic
+	// for topic, no need to base64 topic
 	var target string
 	resource := base64.URLEncoding.EncodeToString([]byte(message.Topic()))
 	if strings.HasPrefix(message.Topic(), "$hw/events/device") || strings.HasPrefix(message.Topic(), "$hw/events/node") {
 		target = modules.TwinGroup
 	} else {
 		target = modules.HubGroup
-		if message.Topic() == "SYS/dis/upload_records" {
-			resource = "SYS/dis/upload_records"
+		if message.Topic() == UploadTopic {
+			resource = UploadTopic
 		}
 	}
 	// routing key will be $hw.<project_id>.events.user.bus.response.cluster.<cluster_id>.node.<node_id>.<base64_topic>
 	msg := model.NewMessage("").BuildRouter(modules.BusGroup, "user",
 		resource, "response").FillBody(string(message.Payload()))
 	klog.Info(fmt.Sprintf("received msg from mqttserver, deliver to %s with resource %s", target, resource))
-	ModuleContext.Send2Group(target, *msg)
+	beehiveContext.SendToGroup(target, *msg)
 }
 
 // InitSubClient init sub client

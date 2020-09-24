@@ -22,6 +22,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubeedge/beehive/pkg/common/util"
+	beehiveContext "github.com/kubeedge/beehive/pkg/core/context"
 	"github.com/kubeedge/beehive/pkg/core/model"
 	"github.com/kubeedge/kubeedge/tests/stubs/common/constants"
 	"github.com/kubeedge/kubeedge/tests/stubs/common/types"
@@ -31,7 +32,13 @@ import (
 func (hs *HandlerStub) WaitforMessage() {
 	go func() {
 		for {
-			if msg, err := hs.context.Receive(hs.Name()); err == nil {
+			select {
+			case <-beehiveContext.Done():
+				klog.Warning("stop waiting for message")
+				return
+			default:
+			}
+			if msg, err := beehiveContext.Receive(hs.Name()); err == nil {
 				klog.V(4).Infof("Receive a message %v", msg)
 				hs.ProcessMessage(msg)
 			} else {
@@ -86,7 +93,7 @@ func (hs *HandlerStub) ProcessInsert(msg model.Message) {
 		// Get pod
 		var pod types.FakePod
 		if err := json.Unmarshal(data, &pod); err != nil {
-			klog.Errorf("Unmarshal content failed with error: %s", msg.GetID(), err)
+			klog.Errorf("Unmarshal content failed with error: %s, %v", msg.GetID(), err)
 			return
 		}
 
@@ -97,7 +104,7 @@ func (hs *HandlerStub) ProcessInsert(msg model.Message) {
 		respMessage.Content = pod
 		respMessage.BuildRouter(constants.HandlerStub, constants.GroupResource, resource, model.UpdateOperation)
 
-		hs.Send2Cloud(respMessage)
+		hs.SendToCloud(respMessage)
 
 		// Add pod in cache
 		hs.podManager.AddPod(pod.Namespace+"/"+pod.Name, pod)
@@ -134,7 +141,7 @@ func (hs *HandlerStub) ProcessDelete(msg model.Message) {
 		// Get pod
 		var pod types.FakePod
 		if err := json.Unmarshal(data, &pod); err != nil {
-			klog.Errorf("Unmarshal content failed with error: %s", msg.GetID(), err)
+			klog.Errorf("Unmarshal content failed with error: %s, %v", msg.GetID(), err)
 			return
 		}
 		// Delete pod in cache
@@ -142,9 +149,9 @@ func (hs *HandlerStub) ProcessDelete(msg model.Message) {
 	}
 }
 
-// Send2Cloud sends message to cloudhub by edgehub
-func (hs *HandlerStub) Send2Cloud(msg *model.Message) {
+// SendToCloud sends message to cloudhub by edgehub
+func (hs *HandlerStub) SendToCloud(msg *model.Message) {
 	klog.V(4).Infof("Begin to send message %v", *msg)
-	hs.context.Send2Group(constants.HubGroup, *msg)
+	beehiveContext.SendToGroup(constants.HubGroup, *msg)
 	klog.V(4).Infof("End to send message %v", *msg)
 }

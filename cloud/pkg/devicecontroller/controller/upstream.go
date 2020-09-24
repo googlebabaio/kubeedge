@@ -17,14 +17,16 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"strconv"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 
+	beehiveContext "github.com/kubeedge/beehive/pkg/core/context"
 	"github.com/kubeedge/beehive/pkg/core/model"
-	"github.com/kubeedge/kubeedge/cloud/pkg/apis/devices/v1alpha1"
+	"github.com/kubeedge/kubeedge/cloud/pkg/apis/devices/v1alpha2"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/config"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/constants"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/messagelayer"
@@ -34,7 +36,7 @@ import (
 
 // DeviceStatus is structure to patch device status
 type DeviceStatus struct {
-	Status v1alpha1.DeviceStatus `json:"status"`
+	Status v1alpha2.DeviceStatus `json:"status"`
 }
 
 const (
@@ -48,11 +50,6 @@ const (
 type UpstreamController struct {
 	crdClient    *rest.RESTClient
 	messageLayer messagelayer.MessageLayer
-
-	// stop channel
-	stopDispatch           chan struct{}
-	stopUpdateDeviceStatus chan struct{}
-
 	// message channel
 	deviceStatusChan chan model.Message
 
@@ -63,28 +60,24 @@ type UpstreamController struct {
 // Start UpstreamController
 func (uc *UpstreamController) Start() error {
 	klog.Info("Start upstream devicecontroller")
-	uc.stopDispatch = make(chan struct{})
-	uc.stopUpdateDeviceStatus = make(chan struct{})
 
-	uc.deviceStatusChan = make(chan model.Message, config.UpdateDeviceStatusBuffer)
+	uc.deviceStatusChan = make(chan model.Message, config.Config.Buffer.UpdateDeviceStatus)
+	go uc.dispatchMessage()
 
-	go uc.dispatchMessage(uc.stopDispatch)
-
-	for i := 0; i < config.UpdateDeviceStatusWorkers; i++ {
-		go uc.updateDeviceStatus(uc.stopUpdateDeviceStatus)
+	for i := 0; i < int(config.Config.Buffer.UpdateDeviceStatus); i++ {
+		go uc.updateDeviceStatus()
 	}
-
 	return nil
 }
 
-func (uc *UpstreamController) dispatchMessage(stop chan struct{}) {
-	running := true
-	go func() {
-		<-stop
-		klog.Info("Stop dispatchMessage")
-		running = false
-	}()
-	for running {
+func (uc *UpstreamController) dispatchMessage() {
+	for {
+		select {
+		case <-beehiveContext.Done():
+			klog.Info("Stop dispatchMessage")
+			return
+		default:
+		}
 		msg, err := uc.messageLayer.Receive()
 		if err != nil {
 			klog.Warningf("Receive message failed, %s", err)
@@ -109,10 +102,12 @@ func (uc *UpstreamController) dispatchMessage(stop chan struct{}) {
 	}
 }
 
-func (uc *UpstreamController) updateDeviceStatus(stop chan struct{}) {
-	running := true
-	for running {
+func (uc *UpstreamController) updateDeviceStatus() {
+	for {
 		select {
+		case <-beehiveContext.Done():
+			klog.Info("Stop updateDeviceStatus")
+			return
 		case msg := <-uc.deviceStatusChan:
 			klog.Infof("Message: %s, operation is: %s, and resource is: %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
 			msgTwin, err := uc.unmarshalDeviceStatusMessage(msg)
@@ -130,7 +125,7 @@ func (uc *UpstreamController) updateDeviceStatus(stop chan struct{}) {
 				klog.Warningf("Device %s does not exist in downstream controller", deviceID)
 				continue
 			}
-			cacheDevice, ok := device.(*CacheDevice)
+			cacheDevice, ok := device.(*v1alpha2.Device)
 			if !ok {
 				klog.Warning("Failed to assert to CacheDevice type")
 				continue
@@ -139,7 +134,7 @@ func (uc *UpstreamController) updateDeviceStatus(stop chan struct{}) {
 			for twinName, twin := range msgTwin.Twin {
 				for i, cacheTwin := range deviceStatus.Status.Twins {
 					if twinName == cacheTwin.PropertyName && twin.Actual != nil && twin.Actual.Value != nil {
-						reported := v1alpha1.TwinProperty{}
+						reported := v1alpha2.TwinProperty{}
 						reported.Value = *twin.Actual.Value
 						reported.Metadata = make(map[string]string)
 						if twin.Actual.Metadata != nil {
@@ -163,15 +158,12 @@ func (uc *UpstreamController) updateDeviceStatus(stop chan struct{}) {
 				klog.Errorf("Failed to marshal device status %v", deviceStatus)
 				continue
 			}
-			result := uc.crdClient.Patch(MergePatchType).Namespace(cacheDevice.Namespace).Resource(ResourceTypeDevices).Name(deviceID).Body(body).Do()
+			result := uc.crdClient.Patch(MergePatchType).Namespace(cacheDevice.Namespace).Resource(ResourceTypeDevices).Name(deviceID).Body(body).Do(context.Background())
 			if result.Error() != nil {
 				klog.Errorf("Failed to patch device status %v of device %v in namespace %v", deviceStatus, deviceID, cacheDevice.Namespace)
 				continue
 			}
 			klog.Infof("Message: %s process successfully", msg.GetID())
-		case <-stop:
-			klog.Info("Stop updateDeviceStatus")
-			running = false
 		}
 	}
 }
@@ -195,26 +187,24 @@ func (uc *UpstreamController) unmarshalDeviceStatusMessage(msg model.Message) (*
 	return twinUpdate, nil
 }
 
-// Stop UpstreamController
-func (uc *UpstreamController) Stop() error {
-	klog.Info("Stopping upstream devicecontroller")
-	defer klog.Info("Upstream devicecontroller stopped")
-
-	uc.stopDispatch <- struct{}{}
-	for i := 0; i < config.UpdateDeviceStatusWorkers; i++ {
-		uc.stopUpdateDeviceStatus <- struct{}{}
-	}
-	return nil
-}
-
 // NewUpstreamController create UpstreamController from config
 func NewUpstreamController(dc *DownstreamController) (*UpstreamController, error) {
 	config, err := utils.KubeConfig()
-	crdcli, err := utils.NewCRDClient(config)
-	ml, err := messagelayer.NewMessageLayer()
 	if err != nil {
-		klog.Warningf("Create message layer failed with error: %s", err)
+		klog.Warningf("Failed to create kube client: %s", err)
+		return nil, err
 	}
-	uc := &UpstreamController{crdClient: crdcli, messageLayer: ml, dc: dc}
+
+	crdcli, err := utils.NewCRDClient(config)
+	if err != nil {
+		klog.Warningf("Failed to create crd client: %s", err)
+		return nil, err
+	}
+
+	uc := &UpstreamController{
+		crdClient:    crdcli,
+		messageLayer: messagelayer.NewContextMessageLayer(),
+		dc:           dc,
+	}
 	return uc, nil
 }

@@ -1,6 +1,7 @@
 package admissioncontroller
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
@@ -21,7 +22,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubeedge/kubeedge/cloud/cmd/admission/app/options"
-	"github.com/kubeedge/kubeedge/cloud/pkg/apis/devices/v1alpha1"
+	"github.com/kubeedge/kubeedge/cloud/pkg/apis/devices/v1alpha2"
 )
 
 const (
@@ -31,7 +32,7 @@ const (
 
 var scheme = runtime.NewScheme()
 
-//Codecs is for retrieving serializers for the supported wire formats
+//codecs is for retrieving serializers for the supported wire formats
 //and conversion wrappers to define preferred internal and external versions.
 var codecs = serializer.NewCodecFactory(scheme)
 
@@ -46,14 +47,14 @@ func addToScheme(scheme *runtime.Scheme) {
 	utilruntime.Must(addDeviceCrds(scheme))
 }
 
-// TODO: move this func to apis/devices/v1alpha1/register.go
+// TODO: move this func to apis/devices/v1alpha2/register.go
 func addDeviceCrds(scheme *runtime.Scheme) error {
 	// Add Device
-	scheme.AddKnownTypes(v1alpha1.SchemeGroupVersion, &v1alpha1.Device{}, &v1alpha1.DeviceList{})
-	metav1.AddToGroupVersion(scheme, v1alpha1.SchemeGroupVersion)
+	scheme.AddKnownTypes(v1alpha2.SchemeGroupVersion, &v1alpha2.Device{}, &v1alpha2.DeviceList{})
+	metav1.AddToGroupVersion(scheme, v1alpha2.SchemeGroupVersion)
 	// Add DeviceModel
-	scheme.AddKnownTypes(v1alpha1.SchemeGroupVersion, &v1alpha1.DeviceModel{}, &v1alpha1.DeviceModelList{})
-	metav1.AddToGroupVersion(scheme, v1alpha1.SchemeGroupVersion)
+	scheme.AddKnownTypes(v1alpha2.SchemeGroupVersion, &v1alpha2.DeviceModel{}, &v1alpha2.DeviceModelList{})
+	metav1.AddToGroupVersion(scheme, v1alpha2.SchemeGroupVersion)
 
 	return nil
 }
@@ -99,10 +100,12 @@ func Run(opt *options.AdmissionOptions) {
 		TLSConfig: configTLS(opt, restConfig),
 	}
 
-	server.ListenAndServeTLS("", "")
+	if err := server.ListenAndServeTLS("", ""); err != nil {
+		klog.Fatalf("Start server failed with error: %v", err)
+	}
 }
 
-// ConfigTLS is a helper function that generate tls certificates from directly defined tls config or kubeconfig
+// configTLS is a helper function that generate tls certificates from directly defined tls config or kubeconfig
 // These are passed in as command line for cluster certification. If tls config is passed in, we use the directly
 // defined tls config, else use that defined in kubeconfig
 func configTLS(opt *options.AdmissionOptions, restConfig *restclient.Config) *tls.Config {
@@ -132,7 +135,7 @@ func configTLS(opt *options.AdmissionOptions, restConfig *restclient.Config) *tl
 	return &tls.Config{}
 }
 
-// Register registers the admission webhook.
+// registerWebhooks registers the admission webhook.
 func (ac *AdmissionController) registerWebhooks(opt *options.AdmissionOptions, cabundle []byte) error {
 	ignorePolicy := admissionregistrationv1beta1.Ignore
 	deviceModelCRDWebhook := admissionregistrationv1beta1.ValidatingWebhookConfiguration{
@@ -149,7 +152,7 @@ func (ac *AdmissionController) registerWebhooks(opt *options.AdmissionOptions, c
 					},
 					Rule: admissionregistrationv1beta1.Rule{
 						APIGroups:   []string{"devices.kubeedge.io"},
-						APIVersions: []string{"v1alpha1"},
+						APIVersions: []string{"v1alpha2"},
 						Resources:   []string{"devicemodels"},
 					},
 				}},
@@ -158,6 +161,7 @@ func (ac *AdmissionController) registerWebhooks(opt *options.AdmissionOptions, c
 						Namespace: opt.AdmissionServiceNamespace,
 						Name:      opt.AdmissionServiceName,
 						Path:      strPtr("/devicemodels"),
+						Port:      &opt.Port,
 					},
 					CABundle: cabundle,
 				},
@@ -166,29 +170,26 @@ func (ac *AdmissionController) registerWebhooks(opt *options.AdmissionOptions, c
 		},
 	}
 
-	if err := registerValidateWebhook(ac.Client.AdmissionregistrationV1beta1().ValidatingWebhookConfigurations(),
-		[]admissionregistrationv1beta1.ValidatingWebhookConfiguration{deviceModelCRDWebhook}); err != nil {
-		return err
-	}
-	return nil
+	return registerValidateWebhook(ac.Client.AdmissionregistrationV1beta1().ValidatingWebhookConfigurations(),
+		[]admissionregistrationv1beta1.ValidatingWebhookConfiguration{deviceModelCRDWebhook})
 }
 
 func registerValidateWebhook(client admissionregistrationv1beta1client.ValidatingWebhookConfigurationInterface,
 	webhooks []admissionregistrationv1beta1.ValidatingWebhookConfiguration) error {
 	for _, hook := range webhooks {
-		existing, err := client.Get(hook.Name, metav1.GetOptions{})
+		existing, err := client.Get(context.Background(), hook.Name, metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
 			return err
 		}
 		if err == nil && existing != nil {
 			existing.Webhooks = hook.Webhooks
 			klog.Infof("Updating ValidatingWebhookConfiguration: %v", hook.Name)
-			if _, err := client.Update(existing); err != nil {
+			if _, err := client.Update(context.Background(), existing, metav1.UpdateOptions{}); err != nil {
 				return err
 			}
 		} else {
 			klog.Infof("Creating ValidatingWebhookConfiguration: %v", hook.Name)
-			if _, err := client.Create(&hook); err != nil {
+			if _, err := client.Create(context.Background(), &hook, metav1.CreateOptions{}); err != nil {
 				return err
 			}
 		}

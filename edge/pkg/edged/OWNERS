@@ -1,9 +1,11 @@
 approvers:
+  - Baoqiang-Zhang
+  - fisherxu
   - kevin-wangzefeng
-  - m1093782566
   - qizha
-  - rohitsardesai83
 reviewers:
   - Baoqiang-Zhang
   - fisherxu
+  - GsssC
+  - kevin-wangzefeng
   - sids-b
